@@ -7,6 +7,7 @@ from torch.nn import LayerNorm, Linear, Softmax, ModuleList, GELU, Sequential, P
 class SelfAttention(nn.Module):
 
     def __init__(self, dim_input, embedding_dim):
+        super(SelfAttention, self).__init__()
         self.query = Linear(dim_input, embedding_dim)
         self.key = Linear(dim_input, embedding_dim)
         self.value = Linear(dim_input, embedding_dim)
@@ -17,7 +18,8 @@ class SelfAttention(nn.Module):
         q = self.query(inputs) # q: [N, embedding_dim]
         k = self.key(inputs) # k: [N, embedding_dim]
         v = self.value(inputs) # v: [N, embedding_dim]
-        scores = torch.matmul(q, torch.transpose(k, -2, -1)) / math.sqrt(self.k.size(-1))
+
+        scores = torch.matmul(q, torch.transpose(k, -2, -1)) / math.sqrt(k.size(-1))
                                                                 # scores: [N, N]
         attention = torch.matmul(self.softmax(scores), v)
 
@@ -27,7 +29,8 @@ class SelfAttention(nn.Module):
 class MultiHeadAttention(nn.Module):
 
     def __init__(self, dim_model, num_head=9):
-        assert dim_model // num_head == 0, "dim_model必须要能整除num_head数目"
+        super(MultiHeadAttention, self).__init__()
+        assert dim_model // num_head != 0, "dim_model必须要能整除num_head数目"
         dim_per_head = dim_model // num_head
         self.num_head = num_head
         self.atten_heads = ModuleList([
@@ -45,11 +48,13 @@ class MultiHeadAttention(nn.Module):
 class EncoderBlock(nn.Module):
 
     def __init__(self, dim_model, mlp_dim, num_head=8, dropout=.5):
-        assert dim_model // num_head == 0
+        super(EncoderBlock, self).__init__()
+        assert dim_model // num_head != 0, "dim_model必须要能整除num_head数目"
         self.norm1 = LayerNorm(dim_model)
         self.msa = MultiHeadAttention(dim_model, num_head)
         self.mlp = Sequential(
             Linear(dim_model, mlp_dim),
+            Dropout(dropout),
             GELU(),
             Linear(mlp_dim, dim_model),
             Dropout(dropout)
@@ -62,7 +67,8 @@ class EncoderBlock(nn.Module):
         res = inputs + output
 
         output = self.norm2(res)
-        output = self.mlp(self.mlp(output))
+        result = self.mlp(output)
+        output = self.mlp(result)
         return res + output # return: [batch_size, N, dim_model ]
 
 class VisionTransformer(nn.Module):
@@ -78,19 +84,23 @@ class VisionTransformer(nn.Module):
                  mlp_dim=128,
                  channel=3,
                  dropout=0.5):
-        assert image_size // patch_size == 0, "注意这里图片不能完整切分"
+        super(VisionTransformer, self).__init__()
+        assert image_size // patch_size != 0, "注意这里图片不能完整切分"
+
+        self.image_size = image_size
         self.patch_size = patch_size
         self.num_patch = (image_size // patch_size) ** 2
         dim_patch = patch_size ** 2 *channel
         self.projection = Linear(dim_patch, dim_model)
-        self.positionEmbedding = Parameter(torch.Tensor([self.num_patch + 1, dim_model]))
-        self.classEmbedding = Parameter(torch.Tensor([batch_size, 1, dim_model]))
+        self.positionEmbedding = Parameter(torch.Tensor(self.num_patch + 1, dim_model))
+        self.classEmbedding = Parameter(torch.Tensor(batch_size, 1, dim_model))
         self.encoder_layers = [
             EncoderBlock(dim_model, mlp_dim, num_head, dropout=dropout) for _ in range(num_layer)
         ]
         self.mlpHead = Sequential(
             LayerNorm(dim_model),
             Linear(dim_model, mlp_dim),
+            Dropout(dropout),
             GELU(),
             Linear(mlp_dim, num_class),
             Dropout(dropout)
@@ -98,10 +108,11 @@ class VisionTransformer(nn.Module):
 
     def extract_patches(self, images):
         # images: [batch_size, channel, input_size, input_size]
-        return torch.stack([torch.flatten(
-                                crop(images, i*self.patch_size, i*self.patch_size, self.patch_size, self.patch_size)
-                            , 1)
-                for i in range(self.num_patch)], 1)
+        patches = []
+        for i in range(self.image_size // self.patch_size):
+            for j in range(self.image_size // self.patch_size):
+                patches.append(torch.flatten(crop(images, i * self.patch_size, i * self.patch_size, self.patch_size, self.patch_size), 1))
+        return torch.stack(patches, 1)
                                                 # return: [batch_size, num_patch, patch_size * patch_size * channel]
         # 这里是暴力方案：
         # 这里是先从batch取出每个image，然后切patch，把每一个patch展平为patch_size * patch_size * channel
@@ -127,5 +138,5 @@ class VisionTransformer(nn.Module):
         embeded_patches = torch.cat([self.classEmbedding, projected_inputs], 1) + self.positionEmbedding # embeded_patches : [batch_size, num_patch + 1, dim_model]
         outputs = None
         for layer in self.encoder_layers:
-            outputs = layer(embeded_patches)
-        return self.mlpHead(outputs) # return: [batch_size, num_classes]
+            outputs = layer(embeded_patches) # outputs : [batch_size, num_patch + 1, dim_model]
+        return self.mlpHead(outputs[:, 0]) # return: [batch_size, num_classes]

@@ -42,7 +42,7 @@ class DataProcess:
             os.mkdir(self.imagenet_test_path)
             self.un_tar(os.path.join(self.root_path, "ILSVRC2012_img_test.tar"), self.imagenet_test_path)
         if not os.path.exists(self.imagenet_val_path):
-            os.mkdir(self.imagenet_test_path)
+            os.mkdir(self.imagenet_val_path)
             self.un_tar(os.path.join(self.root_path, "ILSVRC2012_img_val.tar"), self.imagenet_val_path)
 
 
@@ -52,4 +52,4 @@ class DataProcess:
             root = os.path.join(self.imagenet_train_path, image_name)
         else:
             root = os.path.join(self.imagenet_test_path, image_name)
-        return Image.open(root)
+        return Image.open(root).convert("RGB")

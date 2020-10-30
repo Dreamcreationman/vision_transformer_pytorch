@@ -6,6 +6,7 @@ from torchvision.transforms import transforms
 class ImagenetDataset(Dataset):
 
     def __init__(self, root_path, transform, train=True):
+        super(ImagenetDataset, self).__init__()
         self.root = root_path
         self.transform = transform
         self.train = train
@@ -17,7 +18,9 @@ class ImagenetDataset(Dataset):
 
     def __getitem__(self, item):
         image_path, image_label = self.image_label_list[item % len(self.image_label_list)]
-        return image_path, image_label
+        img = self.load_img(image_path, self.train)
+        # label = torch.tensor(image_label)
+        return img, image_label
 
 
     def __len__(self):
@@ -34,7 +37,7 @@ class ImagenetDataset(Dataset):
             lines = f.readlines()
             for line in lines:
                 content = line.rstrip().split(' ')
-                image_label_list.append((content[0], content[1]))
+                image_label_list.append((content[0], int(content[1])))
         return image_label_list
 
     def load_img(self, image_name, train):

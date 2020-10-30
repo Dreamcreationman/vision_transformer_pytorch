@@ -4,7 +4,6 @@ import torch
 from torch import nn
 import torch.optim as optim
 from util import log
-from torch.autograd import Variable
 from model import VisionTransformer
 from dataset import ImagenetDataset
 from torch.utils.data import DataLoader
@@ -14,7 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 root_path = "E:\Dataset\ImageNet 2012 DataSets"
 logger_path = "log/"
 checkpoints_path = "checkpoints/"
-batch_size = 128
+batch_size = 64
 image_size = 256
 patch_size = 16
 num_layers = 8
@@ -29,39 +28,43 @@ beta1 = 0.9
 beta2 = 0.999
 weight_decay = 0.1
 epoches = 5
+num_workers = 0
 
 logger = log.get_logger(logger_path, "train.log")
-tensorboard_log = os.path.join(logger_path, "/tensorboard")
+tensorboard_log = os.path.join(logger_path, "tensorboard")
 if not os.path.exists(tensorboard_log):
     os.mkdir(tensorboard_log)
 writer = SummaryWriter(tensorboard_log)
 
 
 transform = transforms.Compose([
+    transforms.ToTensor(),
     transforms.Resize(image_size),
     transforms.RandomCrop(image_size, pad_if_needed=True),
-    transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
-    transforms.ToTensor()
+    transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
 ])
 train_set = ImagenetDataset(root_path, transform, train=True)
-trainloader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+trainloader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') # 若能使用cuda，则使用cuda
 model = VisionTransformer(image_size,
                         patch_size,
                         batch_size,
                         dim_model,
-                        num_head,
                         num_layers,
                         num_class,
+                        num_head,
+                        mlp_dim,
                         channel,
                         dropout=dropout)
-model.cuda()
+
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=learning_rate, betas=(beta1, beta2), weight_decay=weight_decay)
 
-logger.info("Start Traing……")
+logger.info("Start Training……")
 for epoch in range(epoches):
+    print("Epoch {}/{}".format(epoch+1, epoches))
+    print("-" * 10)
     epoch_losses = []
     epoch_acces = []
 
@@ -69,6 +72,8 @@ for epoch in range(epoches):
         iter_loss = 0.0
         iter_acc = 0.0
         inputs, labels = data
+
+        model.cuda()
         inputs = inputs.to(device)
         labels = labels.to(device)
 
@@ -78,7 +83,8 @@ for epoch in range(epoches):
 
         loss.backward()
         optimizer.step()
-
+        if num_iter == 0:
+            logger.info("Training is in process……")
         if num_iter % 2000 == 0:
             num_correct = (outputs.argmax(dim=1) == labels).float().mean()
             iter_acc += num_correct / len(trainloader)
@@ -87,7 +93,7 @@ for epoch in range(epoches):
             epoch_losses.append(iter_loss)
             logger.info(
                 "Epoch : {}/{} - Iter : {}/{} - Iter loss : {:.4f} - Iter acc: {:.4f}\n"
-                    .format(epoch + 1, epoches, num_iter + 1, len(trainloader) / batch_size, iter_loss, iter_acc)
+                    .format(epoch + 1, epoches, num_iter + 1, len(trainloader) // batch_size, iter_loss, iter_acc)
             )
             writer.add_scalar('Train/Loss', loss.item(), num_iter + 1)
             writer.add_scalar('Train/acc', iter_acc, num_iter + 1)
