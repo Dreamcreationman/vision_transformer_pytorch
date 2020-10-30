@@ -1,7 +1,6 @@
 import os
 import time
 import torch
-import numpy
 from torch import nn
 import torch.optim as optim
 from util import log
@@ -14,7 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 root_path = "E:\Dataset\ImageNet 2012 DataSets"
 logger_path = "log/"
 checkpoints_path = "checkpoints/"
-batch_size = 8
+batch_size = 16
 image_size = 256
 patch_size = 16
 num_layers = 8
@@ -24,10 +23,10 @@ dim_model = 512
 num_class = 1000
 channel = 3
 dropout = 0.5
-learning_rate = 0.1
+learning_rate = 0.01
 beta1 = 0.9
 beta2 = 0.999
-weight_decay = 0.1
+weight_decay = 0.01
 epoches = 5
 num_workers = 0
 
@@ -37,6 +36,10 @@ if not os.path.exists(tensorboard_log):
     os.mkdir(tensorboard_log)
 writer = SummaryWriter(tensorboard_log)
 
+def init_weights(m):
+    classname = m.__class__.__name__
+    if classname.find('Linear') != -1:
+        nn.init.kaiming_normal_(m.weight)
 
 transform = transforms.Compose([
     transforms.ToTensor(),
@@ -57,8 +60,7 @@ model = VisionTransformer(image_size,
                         num_head,
                         mlp_dim,
                         channel,
-                        dropout=dropout)
-
+                        dropout=dropout).to(device)
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=learning_rate, betas=(beta1, beta2), weight_decay=weight_decay)
 
@@ -74,7 +76,6 @@ for epoch in range(epoches):
         iter_acc = 0.0
         inputs, labels = data
 
-        model.cuda()
         inputs = inputs.to(device)
         labels = labels.to(device)
         optimizer.zero_grad()
@@ -85,21 +86,21 @@ for epoch in range(epoches):
         optimizer.step()
         if num_iter == 0:
             logger.info("Training is in process……")
-        if (num_iter + 1) % 10 == 0:
-            num_correct = (outputs.argmax(dim=1) == labels).float().mean()
-            iter_acc += num_correct / len(trainloader)
-            epoch_acces.append(iter_acc)
-            iter_loss += float(loss.item())
-            epoch_losses.append(iter_loss)
-            logger.info(
-                "Epoch : {}/{} - Iter : {}/{} - Iter loss : {:.4f} - Iter acc: {:.4f}\n"
-                    .format(epoch + 1, epoches, num_iter + 1, len(trainloader) // batch_size, iter_loss, iter_acc)
-            )
-            writer.add_scalar('Train/Loss', loss.item(), num_iter + 1)
-            writer.add_scalar('Train/acc', iter_acc, num_iter + 1)
-            writer.flush()
 
-        if num_iter % 4000 == 0:
+        num_correct = (outputs.argmax(dim=1) == labels).float().mean()
+        iter_acc += num_correct / len(inputs)
+        epoch_acces.append(iter_acc)
+        iter_loss += float(loss.item())
+        epoch_losses.append(iter_loss)
+        logger.info(
+            "Epoch : {}/{} - Iter : {}/{} - Iter loss : {:.4f} - Iter acc: {:.4f} - Num correct: {}"
+                .format(epoch + 1, epoches, num_iter + 1, len(trainloader) // batch_size, iter_loss, iter_acc, num_correct)
+        )
+        writer.add_scalar('Train/Loss', loss.item(), num_iter + 1)
+        writer.add_scalar('Train/acc', iter_acc, num_iter + 1)
+        writer.flush()
+
+        if (num_iter + 1) % 500 == 0:
             if not os.path.exists(checkpoints_path):
                 os.mkdir(checkpoints_path)
             state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict(), 'epoch': epoch, 'epoch_losses': epoch_losses, 'epoch_acces': epoch_acces}

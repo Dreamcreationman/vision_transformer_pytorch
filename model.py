@@ -56,8 +56,7 @@ class EncoderBlock(nn.Module):
             Linear(dim_model, mlp_dim),
             Dropout(dropout),
             GELU(),
-            Linear(mlp_dim, dim_model),
-            Dropout(dropout)
+            Linear(mlp_dim, dim_model)
         )
         self.norm2 = LayerNorm(dim_model)
 
@@ -102,8 +101,7 @@ class VisionTransformer(nn.Module):
             Linear(dim_model, mlp_dim),
             Dropout(dropout),
             GELU(),
-            Linear(mlp_dim, num_class),
-            Dropout(dropout)
+            Linear(mlp_dim, num_class)
         )
 
     def extract_patches(self, images):
@@ -134,8 +132,16 @@ class VisionTransformer(nn.Module):
         patched_inputs = self.extract_patches(inputs) # patched_inputs: [batch_size, num_patch, patch_size * patch_size * channel]
         projected_inputs = self.projection(patched_inputs) # embed_inputs : [batch_size, num_patch, dim_model]
 
+        if patched_inputs[patched_inputs != patched_inputs].size(0) > 0:
+            print("patched_inputs")
+        if projected_inputs[projected_inputs != projected_inputs].size(0) > 0:
+            print(torch.max(patched_inputs), torch.min(patched_inputs))
+            print("projected_inputs", projected_inputs)
         # embedding part
         embeded_patches = torch.cat([self.classEmbedding, projected_inputs], 1) + self.positionEmbedding # embeded_patches : [batch_size, num_patch + 1, dim_model]
+        if embeded_patches[embeded_patches != embeded_patches].size(0) > 0:
+            print(torch.max(projected_inputs), torch.min(projected_inputs))
+            print("embeded_patches", embeded_patches)
         outputs = None
         for _, layer in enumerate(self.encoder_layers):
             outputs = layer(embeded_patches) # outputs : [batch_size, num_patch + 1, dim_model]
