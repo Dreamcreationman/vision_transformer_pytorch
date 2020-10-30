@@ -94,9 +94,9 @@ class VisionTransformer(nn.Module):
         self.projection = Linear(dim_patch, dim_model)
         self.positionEmbedding = Parameter(torch.Tensor(self.num_patch + 1, dim_model))
         self.classEmbedding = Parameter(torch.Tensor(batch_size, 1, dim_model))
-        self.encoder_layers = [
+        self.encoder_layers = ModuleList([
             EncoderBlock(dim_model, mlp_dim, num_head, dropout=dropout) for _ in range(num_layer)
-        ]
+        ])
         self.mlpHead = Sequential(
             LayerNorm(dim_model),
             Linear(dim_model, mlp_dim),
@@ -137,6 +137,6 @@ class VisionTransformer(nn.Module):
         # embedding part
         embeded_patches = torch.cat([self.classEmbedding, projected_inputs], 1) + self.positionEmbedding # embeded_patches : [batch_size, num_patch + 1, dim_model]
         outputs = None
-        for layer in self.encoder_layers:
+        for _, layer in enumerate(self.encoder_layers):
             outputs = layer(embeded_patches) # outputs : [batch_size, num_patch + 1, dim_model]
         return self.mlpHead(outputs[:, 0]) # return: [batch_size, num_classes]

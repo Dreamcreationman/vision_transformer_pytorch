@@ -1,6 +1,7 @@
 import os
 import time
 import torch
+import numpy
 from torch import nn
 import torch.optim as optim
 from util import log
@@ -13,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 root_path = "E:\Dataset\ImageNet 2012 DataSets"
 logger_path = "log/"
 checkpoints_path = "checkpoints/"
-batch_size = 64
+batch_size = 8
 image_size = 256
 patch_size = 16
 num_layers = 8
@@ -23,7 +24,7 @@ dim_model = 512
 num_class = 1000
 channel = 3
 dropout = 0.5
-learning_rate = 0.01
+learning_rate = 0.1
 beta1 = 0.9
 beta2 = 0.999
 weight_decay = 0.1
@@ -76,7 +77,6 @@ for epoch in range(epoches):
         model.cuda()
         inputs = inputs.to(device)
         labels = labels.to(device)
-
         optimizer.zero_grad()
         outputs = model(inputs)
         loss = criterion(outputs, labels)
@@ -85,7 +85,7 @@ for epoch in range(epoches):
         optimizer.step()
         if num_iter == 0:
             logger.info("Training is in process……")
-        if num_iter % 2000 == 0:
+        if (num_iter + 1) % 10 == 0:
             num_correct = (outputs.argmax(dim=1) == labels).float().mean()
             iter_acc += num_correct / len(trainloader)
             epoch_acces.append(iter_acc)
